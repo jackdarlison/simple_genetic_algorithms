@@ -1,3 +1,5 @@
+
+//Was intended to be a function but was easier to make the macro due to the traits required by plotters 
 #[macro_export]
 macro_rules! plot_bar {
     ($title:expr, $x_data:expr, $y_data:expr) => {
