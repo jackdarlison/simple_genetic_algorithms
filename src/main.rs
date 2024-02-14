@@ -2,14 +2,16 @@
 #![allow(unused_variables)]
 
 use std::{collections::HashMap, time::{Duration, Instant}};
-use itertools::Itertools;
 use rand::{seq::SliceRandom, Rng};
+
+use plotters::prelude::*;
 
 mod plotting;
 
 const TARGET: &str = "methinks it is like a weasel";
 const VALID_CHARS: &str = "abcdefghijklmnopqrstuvwxyz ";
 const DEBUG: bool = true;
+const REPEATS: usize = 10;
 
 #[derive(Debug)]
 struct Config {
@@ -31,9 +33,9 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            population_size: 100,
+            population_size: 500,
             mutation_rate: 1.0 / (TARGET.len() as f64),
-            tournament_size: 10,
+            tournament_size: 2,
         }
     }
 }
@@ -47,12 +49,11 @@ struct OutputData {
 
 fn main() {
 
-    let config = Config::new(500, 1.0 / (TARGET.len() as f64), 2);
-
-    let _ = ga_with_crossover(&config);
+    // let config = Config::new(500, 1.0 / (TARGET.len() as f64), 2);
+    // let _ = ga_with_crossover(&config);
 
     // question1();        
-    // question2();
+    question2();
 }
 
 fn question1() {
@@ -61,18 +62,16 @@ fn question1() {
 
     let crossover_y_data = x_data.clone().iter()
         .map(|&p| Config { population_size: p as usize, ..Default::default()})
-        .map(|config| ga_with_crossover(&config))
-        .map(|data| data.evaluations)
+        .map(|config| (0..REPEATS).map(|_| genetic_algorithm(true, &config).evaluations).sum::<usize>() / REPEATS)
         .collect::<Vec<_>>();
 
-    let tournament_y_data = x_data.clone().iter()
+    let no_crossover_y_data = x_data.clone().iter()
         .map(|&p| Config { population_size: p as usize, ..Default::default()})
-        .map(|config| ga_with_tournament_selection(&config))
-        .map(|data| data.evaluations)
+        .map(|config| (0..REPEATS).map(|_| genetic_algorithm(false, &config).evaluations).sum::<usize>() / REPEATS)
         .collect::<Vec<_>>();
 
-    plotting::plot_bar("Crossover - Population Size Vs. Evaluations", &x_data, &crossover_y_data);
-    plotting::plot_bar("No Crossover - Population Size Vs. Evaluations", &x_data, &tournament_y_data);
+    plot_bar!("Crossover - Population Size Vs. Evaluations", &x_data, &crossover_y_data);
+    plot_bar!("No Crossover - Population Size Vs. Evaluations", &x_data, &no_crossover_y_data);
 
     // It is clear that crossover reduces the number of evaluations needed
 
@@ -81,23 +80,21 @@ fn question1() {
 
 fn question2() {
     // varying mutation rate
-    let x_data = vec![0.1, 0.2, 0.5, 1.0, 2.0, 5.0];
+    let x_data = vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0];
 
     let crossover_y_data = x_data.clone().iter()
         .map(|&m| Config { mutation_rate: m / (TARGET.len() as f64), ..Default::default()})
-        .map(|config| ga_with_crossover(&config))
-        .map(|data| data.evaluations)
+        .map(|config| (0..REPEATS).map(|_| genetic_algorithm(true, &config).evaluations).sum::<usize>() / REPEATS)
         .collect::<Vec<_>>();
 
-    let tournament_y_data = x_data.clone().iter()
+    let no_crossover_y_data = x_data.clone().iter()
         .map(|&m| Config { mutation_rate: m / (TARGET.len() as f64), ..Default::default()})
-        .map(|config| ga_with_tournament_selection(&config))
-        .map(|data| data.evaluations)
+        .map(|config| (0..REPEATS).map(|_| genetic_algorithm(false, &config).evaluations).sum::<usize>() / REPEATS)
         .collect::<Vec<_>>();
     
 
-    plotting::plot_bar("Crossover - Mutation Rate Vs. Evaluations", &x_data, &crossover_y_data);
-    plotting::plot_bar("No Crossover - Mutation Rate Vs. Evaluations", &x_data, &tournament_y_data);
+    plot_bar!("Crossover - Mutation Rate Vs. Evaluations", &x_data, &crossover_y_data);
+    plot_bar!("No Crossover - Mutation Rate Vs. Evaluations", &x_data, &no_crossover_y_data);
 }
 
 fn generate_random_character() -> char {
@@ -163,52 +160,6 @@ fn mutation_hill_climber(config: &Config) -> OutputData {
     out 
 }
 
-fn ga_with_tournament_selection(config: &Config) -> OutputData {
-    let mut population = (0..config.population_size)
-        .map(|_| generate_random_string())
-        .collect::<Vec<String>>();
-
-    let mut fitness_evaluations: HashMap<String, usize> = HashMap::new();
-    let mut best_fitness = 0;
-    let mut iterations = 0;
-
-    let timer = Instant::now();
-
-    while best_fitness < TARGET.len() {
-        // randomly choose two individuals and select the best to be the parent
-        let parent = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-            .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
-            .unwrap();
-        
-        // mutate the parent to create the child
-        let child = generate_mutated(parent, config.mutation_rate);
-
-        // replace the worst individual from 2 random individuals
-        let worst = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-            .min_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
-            .unwrap();
-
-        // Would be nice to just change the value of worst, however, there is no choose_multiple_mut
-        let worst_index = population.iter().position(|i| i == worst).unwrap();
-        population[worst_index] = child;
-
-        iterations += 1;
-        best_fitness = *fitness_evaluations.values().clone().max().unwrap_or(&0);
-
-        if DEBUG && iterations % 1000 == 0 {
-            println!("Best fitness {} after {} evaluations", best_fitness, fitness_evaluations.len());
-        }
-    }   
-
-    let out = OutputData {
-        iterations,
-        evaluations: fitness_evaluations.len(),
-        time: timer.elapsed()
-    };
-    if DEBUG { println!("{:?}", out); }
-    out
-}
-
 fn generate_crossover(a: &str, b: &str) -> String {
     a.chars()
         .zip(b.chars())
@@ -216,7 +167,7 @@ fn generate_crossover(a: &str, b: &str) -> String {
         .collect()
 }
 
-fn ga_with_crossover(config: &Config) -> OutputData {
+fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
     println!("Running crossover with {:?}", config);
     let mut population = (0..config.population_size)
         .map(|_| generate_random_string())
@@ -230,17 +181,27 @@ fn ga_with_crossover(config: &Config) -> OutputData {
 
     while best_fitness < TARGET.len() // && iterations < 20
     {
-        // randomly choose two individuals and select the best to be the parent
-        let parent_a = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-            .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
-            .unwrap();
-        let parent_b = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-            .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
-            .unwrap();
-        
-        // crossover the parents to create the child
-        let mut child = generate_crossover(parent_a, parent_b);
-        child = generate_mutated(&child, config.mutation_rate);
+        let child = if crossover {
+            // randomly choose two individuals and select the best to be the parent
+            let parent_a = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
+                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .unwrap();
+            let parent_b = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
+                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .unwrap();
+            
+            // crossover the parents to create the child and mutate
+            let child = generate_crossover(parent_a, parent_b);
+            generate_mutated(&child, config.mutation_rate)
+        } else {
+            // randomly choose two individuals and select the best to be the parent
+            let parent = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
+                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .unwrap();
+
+            // mutate the parent to create the child
+            generate_mutated(parent, config.mutation_rate)
+        };
 
         // replace the worst individual from 2 random individuals
         let worst = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
