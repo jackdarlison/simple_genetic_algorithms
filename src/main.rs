@@ -134,13 +134,13 @@ fn mutation_hill_climber(config: &Config) -> OutputData {
 
     let mut fitness_evaluations: HashMap<String, usize> = HashMap::new();
     let mut iterations = 0;
-    let mut fitness = fitness_evaluations.entry(individual.clone()).or_insert(fitness_score(&individual)).clone();
+    let mut fitness = *fitness_evaluations.entry(individual.clone()).or_insert(fitness_score(&individual));
 
     let timer = Instant::now();
 
     while fitness < TARGET.len() {
         let mutated = generate_mutated(&individual, config.mutation_rate);
-        let mutated_fitness = fitness_evaluations.entry(mutated.clone()).or_insert(fitness_score(&mutated)).clone();
+        let mutated_fitness = *fitness_evaluations.entry(mutated.clone()).or_insert(fitness_score(&mutated));
         if mutated_fitness > fitness {
             individual = mutated;
             fitness = mutated_fitness;
@@ -184,10 +184,10 @@ fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
         let child = if crossover {
             // randomly choose two individuals and select the best to be the parent
             let parent_a = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .max_by_key(|&i| *fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)))
                 .unwrap();
             let parent_b = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .max_by_key(|&i| *fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)))
                 .unwrap();
             
             // crossover the parents to create the child and mutate
@@ -196,7 +196,7 @@ fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
         } else {
             // randomly choose two individuals and select the best to be the parent
             let parent = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-                .max_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+                .max_by_key(|&i| *fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)))
                 .unwrap();
 
             // mutate the parent to create the child
@@ -205,7 +205,7 @@ fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
 
         // replace the worst individual from 2 random individuals
         let worst = population.choose_multiple(&mut rand::thread_rng(), config.tournament_size)
-            .min_by_key(|&i| fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)).clone())
+            .min_by_key(|&i| *fitness_evaluations.entry(i.clone()).or_insert(fitness_score(i)))
             .unwrap();
 
         // Would be nice to just change the value of worst, however, there is no choose_multiple_mut
@@ -213,7 +213,7 @@ fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
         population[worst_index] = child;
 
         iterations += 1;
-        best_fitness = *fitness_evaluations.values().max().clone().unwrap_or(&0);
+        best_fitness = *fitness_evaluations.values().max().unwrap_or(&0);
 
         if DEBUG && iterations % 1000 == 0 {
             println!("Best fitness {} after {} evaluations", best_fitness, fitness_evaluations.len());
