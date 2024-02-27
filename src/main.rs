@@ -10,7 +10,7 @@ mod plotting;
 
 const TARGET: &str = "methinks it is like a weasel";
 const VALID_CHARS: &str = "abcdefghijklmnopqrstuvwxyz ";
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const REPEATS: usize = 10;
 
 #[derive(Debug)]
@@ -54,6 +54,7 @@ fn main() {
 
     // question1();        
     question2();
+    // question3();
 }
 
 fn question1() {
@@ -95,6 +96,17 @@ fn question2() {
 
     plot_bar!("Crossover - Mutation Rate Vs. Evaluations", &x_data, &crossover_y_data);
     plot_bar!("No Crossover - Mutation Rate Vs. Evaluations", &x_data, &no_crossover_y_data);
+}
+
+fn question3() {
+    // varying mutation rate
+    let x_data = vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0];
+    let crossover_y_data = x_data.clone().iter()
+        .map(|&m| Config { mutation_rate: m / (TARGET.len() as f64), ..Default::default()})
+        .map(|config| (0..REPEATS).map(|_| mutation_hill_climber(&config).evaluations).sum::<usize>() / REPEATS)
+        .collect::<Vec<_>>();
+    
+    plot_bar!("Hill Climber - Mutation Rate Vs. Evaluations", &x_data, &crossover_y_data);
 }
 
 fn generate_random_character() -> char {
@@ -168,7 +180,7 @@ fn generate_crossover(a: &str, b: &str) -> String {
 }
 
 fn genetic_algorithm(crossover: bool, config: &Config) -> OutputData {
-    println!("Running crossover with {:?}", config);
+    println!("Running genetic algorithm (crossover: {:?}) with {:?}", crossover, config);
     let mut population = (0..config.population_size)
         .map(|_| generate_random_string())
         .collect::<Vec<String>>();
